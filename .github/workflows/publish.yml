@@ -57,7 +57,7 @@ jobs:
       - name: Publish
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN || secrets.IG_TOKEN_ACCESS }}
           # Where Instagram will cURL the images from. Defaults to this repo's
           # raw URLs, which only works if the repo is PUBLIC. Set the
           # MEDIA_BASE_URL variable to point at a separate public media repo or
