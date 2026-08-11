@@ -1,26 +1,29 @@
-# Fallback: Business Discovery sourcing
+# Alternative: Business Discovery sourcing
 
-Read this if **Instagram Public Content Access** gets denied in App Review, or
-if business verification stalls. It is also the path that gives you real
-attribution.
+**This is not a fallback for an App Review problem** — hashtag search works at
+Standard Access without review (see
+[SETUP.md Step 4](SETUP.md#step-4--access-levels-why-you-dont-need-app-review)).
+Read this for the one thing hashtag search genuinely cannot do: **return the
+author's username.**
 
-## Why it might be needed
+## Why you might switch
 
-Hashtag Search requires the Public Content Access feature, which requires
-App Review **plus business verification** (legal business documents). Approval is
-not guaranteed, and Meta's documented allowed usages for that feature are about
-monitoring your own brand and campaigns — not sourcing other creators' photos.
+Hashtag Search never returns the creator's handle — Meta's docs are explicit
+(*"You cannot request the username field on returned media objects"*), so credit
+is best-effort, recovered only when the creator typed a handle into their own
+caption.
 
-`business_discovery` requires **neither**. From the
-[reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery),
-its only requirements are the permissions `instagram_basic`,
-`instagram_manage_insights`, and `pages_read_engagement`.
+`business_discovery` returns `username` at the account level, so every post it
+finds has a known author. Both endpoints work at Standard Access; the
+[reference](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery)
+lists its requirements as `instagram_basic`, `instagram_manage_insights`, and
+`pages_read_engagement`.
 
 ## What changes
 
 | | Hashtag Search | Business Discovery |
 |---|---|---|
-| Business verification | **Required** | Not required |
+| App Review needed | No (Standard Access) | No (Standard Access) |
 | Author username | **Not available** | **Returned** |
 | Time window | Last 24h (`recent_media`) | No window |
 | Unique-tag cap | 30 per 7 days | N/A |

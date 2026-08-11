@@ -42,9 +42,17 @@ no business verification.
 
 ## Setup
 
-[docs/SETUP.md](docs/SETUP.md). Start with **Step 4** — hashtag search requires
-App Review *plus* Meta business verification, which is the step most likely to
-block this project and the one entirely outside your control.
+[docs/SETUP.md](docs/SETUP.md) — about an hour of clicking, and **no App Review
+or business verification**. Because this app only acts on your own account, it
+runs on **Standard Access**, which every Business-type app gets automatically
+([Meta's access levels](https://developers.facebook.com/docs/graph-api/overview/access-levels):
+*"All Business, Consumer, and Gaming apps are automatically approved for Standard
+Access for all permissions and features."*). App Review gates **Advanced
+Access** — acting on *other people's* accounts — which this project never does.
+
+The one requirement: your IG account and its linked Page must have a role on the
+app, and the app should stay in **Development mode**. See
+[Step 4](docs/SETUP.md#step-4--access-levels-why-you-dont-need-app-review).
 
 ## Layout
 
