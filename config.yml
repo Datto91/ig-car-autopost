@@ -19,26 +19,44 @@ enabled: true
 # recent_media only returns posts from the last 24 hours.
 # ---------------------------------------------------------------------------
 hashtags:
-  - carsofinstagram
-  - carlifestyle
+  # Broad nets -- always return volume, cover the whole 70s-90s range.
+  # Deliberately dropped near-duplicates (jdmlifestyle, jdmgram, 90sjdm,
+  # retrojdm, r32skyline, mk4supra, jza80) to make room for the 70s/80s
+  # classics without breaching the 30-tag cap. The broad tags below already
+  # surface most of what those would have.
   - jdm
-  - stancenation
-  - carswithoutlimits
-  - blacklist
-  - amazingcars247
-  - carporn
-  - itswhitenoise
-  - carinstagram
-  - musclecar
-  - trackday
-  - lowered
-  - slammedenuff
-  - eurospec
-  - carphotography
-  - supercars
-  - carspotting
-  - modifiedcars
-  - stanceworks
+  - jdmculture
+  - 90scars
+  - japanesecars
+  - datsun
+  - oldschooljdm
+  - classicjdm
+  - shakotan
+  # Nissan / Datsun -- R32 through the Z and 510 lineage
+  - r32
+  - nissanskyline
+  - gtr32
+  - hakosuka
+  - datsun510
+  - 240z
+  - datsun240z
+  - 280z
+  - 300zx
+  - s13
+  - silvia
+  # Honda
+  - hondacivic
+  - ek9
+  - nsx
+  - s2000
+  # Toyota
+  - supra
+  - ae86
+  - celica
+  - mr2
+  # Mazda / rotary
+  - rx7
+  - rx3
 
 # How many tags to query per discover run. Rotates through the list so every
 # tag gets covered over the course of a day without hammering any one of them.
@@ -78,6 +96,40 @@ filters:
 # Captions
 # ---------------------------------------------------------------------------
 caption:
+  # ---------------------------------------------------------------------------
+  # How the caption body is built. Three modes:
+  #
+  #   source    Reuse the original poster's description, then append your own
+  #             signature block below. FREE, no API key, and it keeps the
+  #             creator's own words about their car -- which is usually better
+  #             than anything generated. RECOMMENDED.
+  #   template  Rotating canned openers from the `openers:` list. Free.
+  #   ai        Vision model looks at the photo and writes about the actual car.
+  #             Best quality, but the Claude API is NOT free (~$0.004-$0.02 per
+  #             post). Configure under `ai_caption:` below.
+  #
+  # source mode falls back to template automatically when the original post
+  # had no usable description.
+  # ---------------------------------------------------------------------------
+  mode: source
+
+  # Your own block, appended after the original description. This is the part
+  # that is yours -- the account voice, the CTA, the ask. Keep it short; it
+  # rides on every single post.
+  signature: |
+    Follow for daily 70s-90s JDM.
+    DM for credit or removal.
+
+  # Cap on how much of the original description to carry over. Long captions
+  # get truncated at a sentence boundary where possible.
+  max_source_chars: 600
+
+  # Strip these from the original description before reusing it: the original
+  # poster's hashtag block, their @mentions of unrelated accounts, and URLs.
+  # Their self-credit @handle is preserved separately as the credit line.
+  strip_source_hashtags: true
+  strip_source_urls: true
+
   # Best-effort attribution. Hashtag search does NOT return the author's
   # username, so the only handle we can recover is one the creator typed into
   # their own caption. When found, it goes here. When not found, the credit
@@ -86,23 +138,56 @@ caption:
   # Used when no handle could be extracted from the source caption.
   credit_fallback: ""
   # Appended to every post. Keep total hashtags <= 30 (Instagram's cap).
+  # These are the tags on YOUR post -- separate from the `hashtags:` list
+  # above, which is what gets SEARCHED. No 30/7d limit applies here.
   hashtags:
-    - cars
+    - jdm
+    - jdmculture
+    - 90scars
+    - japanesecars
+    - nissan
+    - honda
+    - toyota
+    - skyline
+    - r32
+    - supra
+    - rx7
     - carsofinstagram
-    - carlifestyle
-    - automotive
-    - carphotography
   # Rotating opener lines, picked deterministically per post.
   openers:
-    - "Clean build."
-    - "This one hits different."
-    - "Spec sheet says enough."
-    - "Stance on point."
+    - "90s Japan got it right."
+    - "Peak JDM era."
+    - "RB or 2J?"
+    - "Golden era hardware."
+    - "This aged better than anything modern."
     - "Would you daily this?"
-    - "Right or wrong wheels?"
+    - "Straight out of the Bubble era."
+    - "Nothing since has felt like this."
+    - "Analog and better for it."
     - "Sound on for this one."
-    - "Details matter."
   max_length: 2200
+
+# ---------------------------------------------------------------------------
+# AI captions (only used when caption.mode is "ai")
+#
+# COST WARNING: the Claude API has no free tier.
+#   provider: claude + claude-opus-5    -> ~$0.02  per post (~$3.60/mo at 6/day)
+#   provider: claude + claude-haiku-4-5 -> ~$0.004 per post (~$0.70/mo at 6/day)
+#   provider: github                    -> FREE, rate-limited, uses GITHUB_TOKEN
+#   provider: none                      -> no AI at all
+#
+# Needs ANTHROPIC_API_KEY as a repo secret for the claude provider.
+# ---------------------------------------------------------------------------
+ai_caption:
+  enabled: false
+  provider: github        # claude | github | none
+  model: openai/gpt-4o    # claude-opus-5 / claude-haiku-4-5 for provider: claude
+  max_caption_chars: 200
+  # Append hashtags derived from the car the model identifies (e.g. #fd3s on an
+  # RX-7), so tags are accurate per post instead of identical every time.
+  add_model_tags: true
+  # Skip publishing if the vision model says the image is not primarily a car.
+  skip_if_not_car: true
 
 # ---------------------------------------------------------------------------
 # Publishing cadence

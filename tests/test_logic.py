@@ -14,7 +14,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import store  # noqa: E402
-from src.caption import build_caption, count_hashtags, extract_handle  # noqa: E402
+from src.caption import (  # noqa: E402
+    build_caption,
+    clean_source_description,
+    count_hashtags,
+    extract_handle,
+)
 from src.discover import passes_filters  # noqa: E402
 from src.images import MAX_ASPECT, MIN_ASPECT, MIN_WIDTH, normalize  # noqa: E402
 
@@ -98,6 +103,65 @@ spammy = build_caption(
     {"media_id": "x", "credit_handle": None},
 )
 check_true("over-30 hashtag config gets trimmed", count_hashtags(spammy) <= 30)
+
+# ---------------------------------------------------------------------------
+print("\n[source description reuse] free captions from the original post")
+# ---------------------------------------------------------------------------
+
+src_clean = clean_source_description(
+    "1991 R32 GTR. RB26 with -5 turbos and 18x10 TE37s. "
+    "Shot by @lensguy at the touge. #jdm #r32 https://linktr.ee/x",
+    cfg,
+)
+check_true("keeps the car detail", "RB26" in src_clean and "TE37s" in src_clean)
+check_true("drops the source hashtags", "#jdm" not in src_clean)
+check_true("drops URLs", "linktr" not in src_clean)
+check_true("drops the credit handle from the body", "@lensguy" not in src_clean)
+check_true("no dangling credit cue left behind", "shot by" not in src_clean.lower())
+
+check(
+    "keeps detail after a mid-sentence credit",
+    "4AGE" in clean_source_description(
+        "AE86 hachiroku, owner @tofu_shop, running a 4AGE 20v silvertop.", cfg
+    ),
+    True,
+)
+check(
+    "hashtags-only caption yields nothing reusable",
+    clean_source_description("#jdm #datsun #240z #classic", cfg),
+    "",
+)
+check("empty source yields nothing", clean_source_description("", cfg), "")
+check("None source yields nothing", clean_source_description(None, cfg), "")
+check_true(
+    "over-long source is truncated",
+    len(clean_source_description("Picked this 510 up in Osaka. " * 60, cfg))
+    <= int(cfg["caption"]["max_source_chars"]) + 1,
+)
+
+# Full caption in source mode: body + signature + credit + tags.
+src_cfg = {**cfg, "caption": {**cfg["caption"], "mode": "source"}}
+src_cap = build_caption(
+    src_cfg,
+    {
+        "media_id": "src1",
+        "credit_handle": "lensguy",
+        "source_caption": "FD RX-7 on TE37s, sunset run through the hills. #rx7",
+    },
+)
+check_true("source body used in caption", "FD RX-7" in src_cap)
+check_true("your signature block is appended", "Follow for daily" in src_cap)
+check_true("credit line present", "@lensguy" in src_cap)
+check_true("our hashtags appended", "#jdm" in src_cap)
+check_true("within 2200 chars", len(src_cap) <= 2200)
+check_true("30-hashtag ceiling respected", count_hashtags(src_cap) <= 30)
+
+# Unusable source must fall back to a template opener, never post bare tags.
+fallback_cap = build_caption(
+    src_cfg, {"media_id": "src2", "credit_handle": None, "source_caption": "#jdm #r32"}
+)
+first_line = fallback_cap.split("\n")[0]
+check_true("falls back to a template opener", bool(first_line) and "#" not in first_line)
 
 # ---------------------------------------------------------------------------
 print("\n[candidate filtering]")

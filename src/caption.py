@@ -116,22 +116,120 @@ def count_hashtags(text: str) -> int:
     return len(re.findall(r"#\w+", text))
 
 
+_URL_RE = re.compile(r"https?://\S+|\bwww\.\S+", re.IGNORECASE)
+
+
+def clean_source_description(caption: str | None, cfg: dict) -> str:
+    """Reusable body text from the original poster's description.
+
+    Removes the parts that don't travel: their hashtag block (we append our
+    own), URLs (dead links to their bio/shop), and @mentions of other accounts.
+    The creator's self-credit handle is captured separately by extract_handle,
+    so dropping mentions here doesn't lose attribution.
+
+    Returns "" when nothing usable remains -- the caller then falls back to a
+    template opener.
+    """
+    if not caption:
+        return ""
+
+    cap_cfg = cfg.get("caption") or {}
+    text = caption
+
+    if cap_cfg.get("strip_source_urls", True):
+        text = _URL_RE.sub("", text)
+
+    if cap_cfg.get("strip_source_hashtags", True):
+        text = re.sub(r"#\w+", "", text)
+
+    # Remove the credit phrase (cue + handle, plus a trailing comma if the cue
+    # was parenthetical). Deleting only the handle would leave "shot by last
+    # weekend"; deleting through the end of the sentence would throw away real
+    # detail like "running a 4AGE 20v silvertop". The handle itself survives as
+    # the separate credit line.
+    cue_alternatives = "|".join(
+        re.escape(c) for c in sorted(_CREDIT_CUES, key=len, reverse=True)
+    )
+    text = re.sub(
+        rf"(?:{cue_alternatives})\s*:?\s*@[A-Za-z0-9._]{{1,30}},?",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Any remaining @mentions are unrelated tags; drop the handle but keep the
+    # surrounding words, which may still describe the car.
+    text = _HANDLE_RE.sub("", text)
+
+    # Tidy punctuation stranded by the removals, then re-capitalize sentence
+    # starts so the reused text still reads like prose.
+    text = re.sub(r"\s+([,.!?])", r"\1", text)
+    text = re.sub(r"([,;])\s*([.!?])", r"\2", text)
+    text = re.sub(r"([.!?])\s*[,;]", r"\1", text)
+    text = re.sub(r"[ \t]*[,;][ \t]*(?=\n|$)", "", text)
+    text = re.sub(r"\.{2,}", ".", text)
+    text = re.sub(
+        r"(^|[.!?]\s+)([a-z])",
+        lambda m: m.group(1) + m.group(2).upper(),
+        text,
+    )
+
+    # Collapse the whitespace the removals left behind, preserving paragraphs.
+    lines = [re.sub(r"[ \t]+", " ", ln).strip() for ln in text.splitlines()]
+    text = "\n".join(ln for ln in lines if ln)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip(" \n-|·•,")
+
+    # A couple of stray words left after stripping isn't a description.
+    if len(text) < 15:
+        return ""
+
+    limit = int(cap_cfg.get("max_source_chars", 600))
+    if len(text) > limit:
+        window = text[:limit]
+        # Prefer cutting at a sentence end so we don't leave a dangling clause.
+        cut = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
+        if cut > limit // 2:
+            text = window[: cut + 1].strip()
+        else:
+            text = window.rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+
+    return text
+
+
 def build_caption(cfg: dict, candidate: dict) -> str:
     """Assemble the final caption for a candidate.
 
     Layout:
-        <opener>
+        <body -- original description, AI caption, or template opener>
+        <your signature block>
         <credit line, if a handle was recovered>
         <hashtags>
     """
     cap_cfg = cfg.get("caption") or {}
     media_id = candidate.get("media_id", "")
+    mode = (cap_cfg.get("mode") or "template").lower()
 
     parts: list[str] = []
 
-    opener = _pick_opener(cap_cfg.get("openers") or [], media_id)
-    if opener:
-        parts.append(opener)
+    # --- body -------------------------------------------------------------
+    body = ""
+    if mode == "ai":
+        # discover.py puts the vision model's text here when it succeeded.
+        body = (candidate.get("ai_caption") or "").strip()
+    elif mode == "source":
+        body = clean_source_description(candidate.get("source_caption"), cfg)
+
+    if not body:
+        # Every mode degrades to a template opener rather than posting bare tags.
+        body = _pick_opener(cap_cfg.get("openers") or [], media_id)
+
+    if body:
+        parts.append(body)
+
+    # --- your own block ---------------------------------------------------
+    signature = (cap_cfg.get("signature") or "").strip()
+    if signature:
+        parts.append(signature)
 
     handle = candidate.get("credit_handle")
     if handle:
