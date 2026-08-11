@@ -1,0 +1,119 @@
+# ig-car-autopost configuration
+#
+# Secrets do NOT live here. They come from GitHub Actions secrets:
+#   IG_USER_ID, IG_ACCESS_TOKEN, FB_APP_ID, FB_APP_SECRET
+
+# ---------------------------------------------------------------------------
+# KILL SWITCH. Set to false to stop all publishing without touching workflows.
+# ---------------------------------------------------------------------------
+enabled: true
+
+# ---------------------------------------------------------------------------
+# Hashtag sourcing
+#
+# HARD META LIMIT: 30 unique hashtags per rolling 7-day window, per app.
+# Every new tag you resolve burns one slot. Ids are cached forever in
+# state/hashtag_ids.json, but the *query* still counts, so keep this list at
+# or under 30 and change it rarely. Adding a 31st tag mid-week = API errors.
+#
+# recent_media only returns posts from the last 24 hours.
+# ---------------------------------------------------------------------------
+hashtags:
+  - carsofinstagram
+  - carlifestyle
+  - jdm
+  - stancenation
+  - carswithoutlimits
+  - blacklist
+  - amazingcars247
+  - carporn
+  - itswhitenoise
+  - carinstagram
+  - musclecar
+  - trackday
+  - lowered
+  - slammedenuff
+  - eurospec
+  - carphotography
+  - supercars
+  - carspotting
+  - modifiedcars
+  - stanceworks
+
+# How many tags to query per discover run. Rotates through the list so every
+# tag gets covered over the course of a day without hammering any one of them.
+tags_per_run: 5
+
+# Prefer top_media (not limited to 24h, higher quality) over recent_media.
+# recent_media is used as a fallback when top_media is thin.
+use_top_media: true
+
+# ---------------------------------------------------------------------------
+# Candidate filtering
+# ---------------------------------------------------------------------------
+filters:
+  # IMAGE only. Video/Reels publishing needs a different upload flow, and
+  # CAROUSEL_ALBUM does not return a media_url at all.
+  allowed_media_types:
+    - IMAGE
+  min_like_count: 500
+  min_comments_count: 5
+  # Skip captions containing these (spam, dealers, giveaways, competitors).
+  caption_denylist:
+    - dm to buy
+    - link in bio to buy
+    - giveaway
+    - follow for follow
+    - f4f
+    - cheap
+    - crypto
+    - forex
+    - onlyfans
+    - promo code
+    - discount code
+  # Skip posts whose caption has more than this many hashtags (spam signal).
+  max_caption_hashtags: 30
+
+# ---------------------------------------------------------------------------
+# Captions
+# ---------------------------------------------------------------------------
+caption:
+  # Best-effort attribution. Hashtag search does NOT return the author's
+  # username, so the only handle we can recover is one the creator typed into
+  # their own caption. When found, it goes here. When not found, the credit
+  # line is omitted entirely.
+  credit_template: "\U0001F4F8 {handle}"
+  # Used when no handle could be extracted from the source caption.
+  credit_fallback: ""
+  # Appended to every post. Keep total hashtags <= 30 (Instagram's cap).
+  hashtags:
+    - cars
+    - carsofinstagram
+    - carlifestyle
+    - automotive
+    - carphotography
+  # Rotating opener lines, picked deterministically per post.
+  openers:
+    - "Clean build."
+    - "This one hits different."
+    - "Spec sheet says enough."
+    - "Stance on point."
+    - "Would you daily this?"
+    - "Right or wrong wheels?"
+    - "Sound on for this one."
+    - "Details matter."
+  max_length: 2200
+
+# ---------------------------------------------------------------------------
+# Publishing cadence
+# ---------------------------------------------------------------------------
+publish:
+  # Posts per publish run. Meta allows 100/24h; staying well under keeps the
+  # account looking human and leaves headroom.
+  posts_per_run: 1
+  # Refuse to publish if this many posts already went out in the rolling 24h.
+  daily_cap: 6
+  # Minimum minutes between two published posts.
+  min_gap_minutes: 90
+  # Seconds to wait for a container to reach FINISHED.
+  container_timeout: 300

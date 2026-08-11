@@ -1,0 +1,89 @@
+name: publish
+
+# Pop queued candidates and post them to Instagram. Fully automatic.
+#
+# Runs offset from discover.yml so re-hosted images are already committed and
+# live on raw.githubusercontent.com before Meta tries to fetch them.
+#
+# To stop all posting without editing workflows: set `enabled: false` in
+# config.yml and push. The next run will exit without posting.
+
+on:
+  schedule:
+    # ~3x/day. config.yml daily_cap and min_gap_minutes are the real limits;
+    # extra runs simply no-op when the cadence guard says it is too soon.
+    - cron: "45 10,16,22 * * *"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "How many posts to publish"
+        required: false
+        default: "1"
+      dry_run:
+        description: "Dry run (stop before posting)"
+        type: boolean
+        required: false
+        default: false
+      force:
+        description: "Ignore local cadence guards"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # Shares the lock with discover so state files never interleave, and two
+  # publish runs can never double-post the same queue item.
+  group: ig-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Publish
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          # Where Instagram will cURL the images from. Defaults to this repo's
+          # raw URLs, which only works if the repo is PUBLIC. Set the
+          # MEDIA_BASE_URL variable to point at a separate public media repo or
+          # a CDN if you keep this repo private.
+          MEDIA_BASE_URL: ${{ vars.MEDIA_BASE_URL }}
+          MEDIA_BRANCH: ${{ github.ref_name }}
+        run: |
+          python -m src.publish \
+            --count "${{ github.event.inputs.count || '1' }}" \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }} \
+            ${{ github.event.inputs.force  == 'true' && '--force'   || '' }}
+
+      - name: Commit publish log
+        if: always() && github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name  "ig-car-autopost[bot]"
+          git config user.email "actions@github.com"
+          git add queue state
+          if git diff --staged --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "publish: record posted items [skip ci]"
+            for i in 1 2 3; do
+              git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && break
+              echo "push attempt $i failed; retrying"
+              sleep 5
+            done
+          fi

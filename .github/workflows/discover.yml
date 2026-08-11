@@ -1,0 +1,79 @@
+name: discover
+
+# Find candidate posts, re-host their images, commit them to the repo.
+#
+# This MUST run (and commit) before publish.yml, because Instagram's
+# POST /media cURLs the image URL itself -- the file has to already be live on
+# raw.githubusercontent.com before we ask Meta to fetch it.
+#
+# NOTE: GitHub disables scheduled workflows after 60 days of repository
+# inactivity. These jobs commit state on nearly every run, which keeps the
+# repo active and the schedules alive.
+
+on:
+  schedule:
+    # 4x/day, offset from the publish schedule so media lands first.
+    # Cron here is best-effort; Actions can delay a run by 5-30+ minutes.
+    - cron: "10 2,8,14,20 * * *"
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max candidates to queue"
+        required: false
+        default: "6"
+      dry_run:
+        description: "Dry run (queue nothing)"
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  # Never let two discover runs race on the same state files.
+  group: ig-state
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Discover candidates
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          python -m src.discover \
+            --limit "${{ github.event.inputs.limit || '6' }}" \
+            ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Commit queue and media
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          git config user.name  "ig-car-autopost[bot]"
+          git config user.email "actions@github.com"
+          git add media queue state
+          if git diff --staged --quiet; then
+            echo "nothing new to commit"
+          else
+            git commit -m "discover: queue new candidates [skip ci]"
+            # Another job may have pushed while we ran; rebase and retry.
+            for i in 1 2 3; do
+              git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && \
+              git push origin "HEAD:${GITHUB_REF_NAME}" && break
+              echo "push attempt $i failed; retrying"
+              sleep 5
+            done
+          fi

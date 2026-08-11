@@ -1,0 +1,61 @@
+name: test
+
+# Offline tests: no credentials, no network. Guards the logic that protects the
+# account (rate limits, hashtag budget, image constraints, caption rules).
+# Runs on every push so a bad config or a broken filter is caught before the
+# publish cron acts on it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate config and workflow YAML
+        run: |
+          python - <<'PY'
+          import sys, yaml
+          from pathlib import Path
+          bad = False
+          for f in sorted(Path('.').glob('.github/workflows/*.yml')) + [Path('config.yml')]:
+              try:
+                  yaml.safe_load(f.read_text(encoding='utf-8'))
+                  print('ok  ', f)
+              except Exception as exc:
+                  print('FAIL', f, exc); bad = True
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: Validate config against Meta's hard limits
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, '.')
+          from src import store
+          # load_config raises if the hashtag list exceeds Meta's 30-unique cap.
+          cfg = store.load_config()
+          pub = cfg['publish']
+          assert pub['daily_cap'] < 100, 'daily_cap must stay under Meta 100/24h'
+          assert cfg['tags_per_run'] <= len(cfg['hashtags']), 'tags_per_run exceeds tag list'
+          print(f"config ok: {len(cfg['hashtags'])} hashtags, "
+                f"daily_cap={pub['daily_cap']}, min_gap={pub['min_gap_minutes']}m, "
+                f"enabled={cfg['enabled']}")
+          PY
+
+      - name: Run logic tests
+        run: python -m tests.test_logic

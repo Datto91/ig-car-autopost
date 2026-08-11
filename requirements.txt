@@ -1,0 +1,6 @@
+# Ranges rather than exact pins: Pillow in particular is a common shared
+# dependency (pdfplumber, matplotlib), and hard-pinning it makes this project
+# fight whatever else is installed locally. Actions installs fresh each run.
+requests>=2.32,<3
+PyYAML>=6.0,<7
+Pillow>=11.0,<14
